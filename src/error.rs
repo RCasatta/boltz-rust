@@ -221,30 +221,6 @@ impl From<bitcoin::taproot::TaprootBuilderError> for Error {
     }
 }
 
-impl From<elements::secp256k1_zkp::MusigTweakErr> for Error {
-    fn from(value: elements::secp256k1_zkp::MusigTweakErr) -> Self {
-        Self::Musig2(value.to_string())
-    }
-}
-
-impl From<elements::secp256k1_zkp::MusigNonceGenError> for Error {
-    fn from(value: elements::secp256k1_zkp::MusigNonceGenError) -> Self {
-        Self::Musig2(value.to_string())
-    }
-}
-
-impl From<elements::secp256k1_zkp::ParseError> for Error {
-    fn from(value: elements::secp256k1_zkp::ParseError) -> Self {
-        Self::Musig2(value.to_string())
-    }
-}
-
-impl From<elements::secp256k1_zkp::MusigSignError> for Error {
-    fn from(value: elements::secp256k1_zkp::MusigSignError) -> Self {
-        Self::Musig2(value.to_string())
-    }
-}
-
 impl From<bitcoin::consensus::encode::Error> for Error {
     fn from(value: bitcoin::consensus::encode::Error) -> Self {
         Self::BitcoinEncode(value)

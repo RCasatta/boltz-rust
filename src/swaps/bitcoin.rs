@@ -29,10 +29,6 @@ use super::wrappers::SwapScriptCommon;
 
 use crate::network::{BitcoinChain, BitcoinClient};
 use crate::util::fees::{create_tx_with_fee, Fee};
-use elements::secp256k1_zkp::{
-    MusigAggNonce, MusigKeyAggCache, MusigPartialSignature, MusigPubNonce, MusigSession,
-    MusigSessionId,
-};
 
 /// Bitcoin v2 swap script helper.
 // TODO: This should encode the network at global level.

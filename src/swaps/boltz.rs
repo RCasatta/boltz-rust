@@ -37,7 +37,6 @@ pub const BOLTZ_REGTEST: &str = "http://localhost:9001/v2";
 
 #[cfg(feature = "ws")]
 pub use crate::swaps::status_stream::{BoltzWsApi, BoltzWsConfig};
-use elements::secp256k1_zkp::{MusigPartialSignature, MusigPubNonce};
 use reqwest::RequestBuilder;
 #[cfg(feature = "ws")]
 pub use tokio_tungstenite_wasm;

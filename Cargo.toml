@@ -1,7 +1,10 @@
 [package]
 name = "boltz-client"
 description = "a boltz exchange client for swaps between BTC/LBTC & LN"
-authors = ["i5hi <ishi@satoshiportal.com>", "Rajarshi Maitra <raj@bitshala.org>"]
+authors = [
+    "i5hi <ishi@satoshiportal.com>",
+    "Rajarshi Maitra <raj@bitshala.org>",
+]
 version = "0.3.0"
 edition = "2021"
 license = "MIT"
@@ -13,10 +16,7 @@ doctest = false
 crate-type = ["lib"]
 
 [workspace]
-members = [
-    "bindings",
-    "macros",
-]
+members = ["bindings", "macros"]
 
 [workspace.dependencies]
 bitcoin = { version = "0.32.2", features = ["rand", "base64", "rand-std"] }
@@ -36,6 +36,7 @@ panic = "abort"
 
 [dependencies]
 bitcoin = { workspace = true }
+secp256k1 = { version = "0.32.0-beta.0", features = ["rand"] }
 elements = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -47,14 +48,25 @@ url = "2.5.0"
 log = "^0.4"
 env_logger = "0.7"
 hex = "0.4"
-lnurl-rs = { version = "0.9.0", default-features = false, features = ["async", "async-https"], optional = true }
-reqwest = { version = "0.12.12" , default-features = false, features = ["json", "rustls-tls"] }
+lnurl-rs = { version = "0.9.0", default-features = false, features = [
+    "async",
+    "async-https",
+], optional = true }
+reqwest = { version = "0.12.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
 macros = { path = "macros" }
 futures-util = "0.3.31"
-tokio-tungstenite-wasm = { version = "0.6.0", features = ["rustls-tls-webpki-roots"], optional = true }
+tokio-tungstenite-wasm = { version = "0.6.0", features = [
+    "rustls-tls-webpki-roots",
+], optional = true }
 
 [target.'cfg(not(all(target_family = "wasm", target_os = "unknown")))'.dependencies]
-electrum-client = { version = "0.21.0", default-features = false, features = ["use-rustls-ring", "proxy"], optional = true }
+electrum-client = { version = "0.21.0", default-features = false, features = [
+    "use-rustls-ring",
+    "proxy",
+], optional = true }
 
 [target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
@@ -62,9 +74,6 @@ js-sys = "0.3.77"
 web-sys = "0.3.77"
 wasm-bindgen-futures = "0.4.50"
 gloo-timers = { version = "0.3.0", features = ["futures"] }
-
-[patch.crates-io]
-secp256k1-zkp = { git = "https://github.com/breez/rust-secp256k1-zkp.git", rev = "eac2e479255a6e32b5588bc25ee53c642fdd8395" }
 
 [dev-dependencies]
 serial_test = { workspace = true }

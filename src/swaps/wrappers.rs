@@ -5,9 +5,10 @@ use bitcoin::hashes::{sha256, Hash};
 use bitcoin::hex::FromHex;
 use bitcoin::secp256k1::Keypair;
 use bitcoin::Transaction as BtcTransaction;
-use elements::secp256k1_zkp::{MusigPartialSignature, MusigPubNonce};
 use elements::Transaction as LbtcTransaction;
 use lightning_invoice::Bolt11Invoice;
+use secp256k1::ffi::{MusigPartialSignature, MusigPubNonce};
+use secp256k1::musig;
 use serde_json::Value;
 
 use super::boltz::{
@@ -163,7 +164,7 @@ pub trait SwapScriptCommon {
         keys: &Keypair,
         pub_nonce: &str,
         transaction_hash: &str,
-    ) -> Result<(MusigPartialSignature, MusigPubNonce), Error>;
+    ) -> Result<(musig::PartialSignature, musig::PublicNonce), Error>;
 }
 
 /// A wrapper for swap scripts that can be either Bitcoin or Liquid
@@ -314,7 +315,7 @@ impl SwapScript {
         swap_id: &String,
         boltz_api: &'a BoltzApiClientV2,
     ) -> Result<Cooperative<'a>, Error> {
-        let signature: Option<(MusigPartialSignature, MusigPubNonce)> = match boltz_api
+        let signature: Option<(musig::PartialSignature, musig::PublicNonce)> = match boltz_api
             .get_chain_claim_tx_details(swap_id)
             .await
         {
