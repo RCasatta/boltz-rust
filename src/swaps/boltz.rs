@@ -368,7 +368,7 @@ impl BoltzApiClientV2 {
     }
 
     /// Returns the WebSocket URL for the Boltz server
-    fn get_ws_url(&self) -> String {
+    pub fn get_ws_url(&self) -> String {
         self.base_url.clone().replace("http", "ws") + "/ws"
     }
 
