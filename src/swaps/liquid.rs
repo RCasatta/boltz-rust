@@ -14,10 +14,10 @@ use elements::{
     Address, AssetIssuance, BlockHash, LockTime, OutPoint, SchnorrSig, SchnorrSighashType, Script,
     Sequence, Transaction, TxIn, TxInWitness, TxOut, TxOutWitness,
 };
-use secp256k1::{
+use secp256k1_musig::{
     ffi::{MusigAggNonce, MusigPubNonce, MusigSession},
     musig,
-    rand::thread_rng,
+    rand::{self, thread_rng},
     Scalar,
 };
 use std::str::FromStr;
@@ -649,7 +649,7 @@ impl LBtcSwapTx {
 
             let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak).expect("TODO");
 
-            let session_id = musig::SessionSecretRand::from_rng(&mut secp256k1::rand::rng());
+            let session_id = musig::SessionSecretRand::from_rng(&mut rand::rng());
 
             let mut extra_rand = [0u8; 32];
             OsRng.fill_bytes(&mut extra_rand);
@@ -959,7 +959,7 @@ impl LBtcSwapTx {
 
             let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak).expect("TODO");
 
-            let session_id = musig::SessionSecretRand::from_rng(&mut secp256k1::rand::rng());
+            let session_id = musig::SessionSecretRand::from_rng(&mut rand::rng());
 
             let mut extra_rand = [0u8; 32];
             OsRng.fill_bytes(&mut extra_rand);
@@ -1259,22 +1259,22 @@ impl LBtcSwapTx {
 }
 
 fn convert_schnorr_signature(
-    schnorr_sig: secp256k1::schnorr::Signature,
+    schnorr_sig: secp256k1_musig::schnorr::Signature,
 ) -> bitcoin::secp256k1::schnorr::Signature {
     todo!()
 }
 
 fn convert_pubkeys_for_musig<'a>(
     _pubkeys: &'a [elements::secp256k1_zkp::PublicKey; 2],
-) -> [&'a secp256k1::PublicKey; 2] {
+) -> [&'a secp256k1_musig::PublicKey; 2] {
     todo!()
 }
 
-fn convert_xonly_key(_key: secp256k1::XOnlyPublicKey) -> bitcoin::XOnlyPublicKey {
+fn convert_xonly_key(_key: secp256k1_musig::XOnlyPublicKey) -> bitcoin::XOnlyPublicKey {
     todo!()
 }
 
-fn convert_public_key(_key: elements::secp256k1_zkp::PublicKey) -> secp256k1::PublicKey {
+fn convert_public_key(_key: elements::secp256k1_zkp::PublicKey) -> secp256k1_musig::PublicKey {
     todo!()
 }
 
@@ -1335,7 +1335,7 @@ impl SwapScriptCommon for LBtcSwapScript {
 
         let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak).expect("TODO");
 
-        let session_id = musig::SessionSecretRand::from_rng(&mut secp256k1::rand::rng());
+        let session_id = musig::SessionSecretRand::from_rng(&mut rand::rng());
 
         let msg = hex_to_bytes32(transaction_hash)?;
 
@@ -1364,7 +1364,7 @@ impl SwapScriptCommon for LBtcSwapScript {
     }
 }
 
-fn convert_keypair(keys: &Keypair) -> &secp256k1::Keypair {
+fn convert_keypair(keys: &Keypair) -> &secp256k1_musig::Keypair {
     todo!()
 }
 

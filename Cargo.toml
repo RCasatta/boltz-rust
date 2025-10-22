@@ -36,7 +36,9 @@ panic = "abort"
 
 [dependencies]
 bitcoin = { workspace = true }
-secp256k1 = { version = "0.32.0-beta.0", features = ["rand"] }
+secp256k1_musig = { package = "secp256k1", version = "0.32.0-beta.0", features = [
+    "rand",
+] }
 elements = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

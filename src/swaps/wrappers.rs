@@ -7,8 +7,8 @@ use bitcoin::secp256k1::Keypair;
 use bitcoin::Transaction as BtcTransaction;
 use elements::Transaction as LbtcTransaction;
 use lightning_invoice::Bolt11Invoice;
-use secp256k1::ffi::{MusigPartialSignature, MusigPubNonce};
-use secp256k1::musig;
+use secp256k1_musig::ffi::{MusigPartialSignature, MusigPubNonce};
+use secp256k1_musig::musig;
 use serde_json::Value;
 
 use super::boltz::{

@@ -24,6 +24,7 @@ use bitcoin::secp256k1;
 use bitcoin::{hashes::sha256, hex::DisplayHex, PublicKey};
 use lightning_invoice::Bolt11Invoice;
 use reqwest::Method;
+use secp256k1_musig::musig;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -528,8 +529,8 @@ impl BoltzApiClientV2 {
     pub async fn post_submarine_claim_tx_details(
         &self,
         id: &String,
-        pub_nonce: MusigPubNonce,
-        partial_sig: MusigPartialSignature,
+        pub_nonce: musig::PublicNonce,
+        partial_sig: musig::PartialSignature,
     ) -> Result<Value, Error> {
         let data = json!(
             {
@@ -545,7 +546,7 @@ impl BoltzApiClientV2 {
         &self,
         id: &String,
         preimage: &Preimage,
-        signature: Option<(MusigPartialSignature, MusigPubNonce)>,
+        signature: Option<(musig::PartialSignature, musig::PublicNonce)>,
         to_sign: ToSign,
     ) -> Result<PartialSig, Error> {
         let data = match signature {
@@ -603,7 +604,7 @@ impl BoltzApiClientV2 {
         &self,
         id: &String,
         preimage: &Preimage,
-        pub_nonce: &MusigPubNonce,
+        pub_nonce: &musig::PublicNonce,
         claim_tx_hex: &String,
     ) -> Result<PartialSig, Error> {
         let data = json!(
@@ -623,7 +624,7 @@ impl BoltzApiClientV2 {
         &self,
         id: &String,
         input_index: usize,
-        pub_nonce: &MusigPubNonce,
+        pub_nonce: &musig::PublicNonce,
         refund_tx_hex: &String,
     ) -> Result<PartialSig, Error> {
         let data = json!(
@@ -642,7 +643,7 @@ impl BoltzApiClientV2 {
         &self,
         id: &String,
         input_index: usize,
-        pub_nonce: &MusigPubNonce,
+        pub_nonce: &musig::PublicNonce,
         refund_tx_hex: &String,
     ) -> Result<PartialSig, Error> {
         let data = json!(
@@ -1360,7 +1361,7 @@ pub struct Cooperative<'a> {
     pub swap_id: String,
     /// The signature (partial_sig + pub_nonce) is needed to post the claim tx details of the Chain swap
     /// It may be omitted for a chain swap if we've already sent the signature to Boltz
-    pub signature: Option<(MusigPartialSignature, MusigPubNonce)>,
+    pub signature: Option<(musig::PartialSignature, musig::PublicNonce)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

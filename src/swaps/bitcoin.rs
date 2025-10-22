@@ -2,7 +2,7 @@ use bitcoin::consensus::deserialize;
 use bitcoin::hashes::Hash;
 use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::key::rand::rngs::OsRng;
-use bitcoin::key::rand::{thread_rng, RngCore};
+use bitcoin::key::rand::RngCore;
 use bitcoin::secp256k1::{Keypair, Message, Secp256k1, SecretKey};
 use bitcoin::sighash::Prevouts;
 use bitcoin::taproot::{LeafVersion, Signature, TaprootBuilder, TaprootSpendInfo};
@@ -15,6 +15,10 @@ use bitcoin::{
 use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut, Witness};
 use bitcoin::{Amount, TapLeafHash, TapSighashType, Txid, XOnlyPublicKey};
 use elements::pset::serialize::Serialize;
+use secp256k1_musig::{
+    musig::{self, KeyAggCache, PartialSignature, PublicNonce, SessionSecretRand},
+    rand, Scalar,
+};
 use std::str::FromStr;
 
 use crate::{error::Error, util::secrets::Preimage};
@@ -111,16 +115,18 @@ impl BtcSwapScript {
         })
     }
 
-    pub fn musig_keyagg_cache(&self) -> MusigKeyAggCache {
+    pub fn musig_keyagg_cache(&self) -> musig::KeyAggCache {
         match (self.swap_type, self.side.clone()) {
             (SwapType::ReverseSubmarine, _) | (SwapType::Chain, Some(Side::Claim)) => {
                 let pubkeys = [self.sender_pubkey.inner, self.receiver_pubkey.inner];
-                MusigKeyAggCache::new(&Secp256k1::new(), &pubkeys)
+                let converted = convert_pubkeys_for_musig(&pubkeys);
+                musig::KeyAggCache::new(&converted)
             }
 
             (SwapType::Submarine, _) | (SwapType::Chain, _) => {
                 let pubkeys = [self.receiver_pubkey.inner, self.sender_pubkey.inner];
-                MusigKeyAggCache::new(&Secp256k1::new(), &pubkeys)
+                let converted = convert_pubkeys_for_musig(&pubkeys);
+                musig::KeyAggCache::new(&converted)
             }
         }
     }
@@ -311,14 +317,15 @@ impl BtcSwapScript {
         let taproot_builder =
             taproot_builder.add_leaf_with_ver(1, self.refund_script(), LeafVersion::TapScript)?;
 
-        let taproot_spend_info = match taproot_builder.finalize(&secp, internal_key) {
-            Ok(r) => r,
-            Err(e) => {
-                return Err(Error::Taproot(format!(
-                    "Could not finalize taproot constructions: {e:?}"
-                )))
-            }
-        };
+        let taproot_spend_info =
+            match taproot_builder.finalize(&secp, convert_xonly_key(internal_key)) {
+                Ok(r) => r,
+                Err(e) => {
+                    return Err(Error::Taproot(format!(
+                        "Could not finalize taproot constructions: {e:?}"
+                    )))
+                }
+            };
 
         // Verify taproot construction, only if we have funding address previously known.
         // Which will be None only for regtest integration tests, so verification will be skipped for them.
@@ -575,7 +582,7 @@ impl BtcSwapTx {
         keys: &Keypair,
         pub_nonce: &str,
         transaction_hash: &str,
-    ) -> Result<(MusigPartialSignature, MusigPubNonce), Error> {
+    ) -> Result<(musig::PartialSignature, musig::PublicNonce), Error> {
         self.swap_script
             .partial_sign(keys, pub_nonce, transaction_hash)
     }
@@ -633,32 +640,33 @@ impl BtcSwapTx {
                     bitcoin::TapSighashType::Default,
                 )?;
 
-            let msg = Message::from_digest_slice(claim_tx_taproot_hash.as_byte_array())?;
+            let msg = *claim_tx_taproot_hash.as_byte_array();
 
             // Step 2: Get the Public and Secret nonces
             let mut key_agg_cache = self.swap_script.musig_keyagg_cache();
 
-            let tweak = SecretKey::from_slice(
+            let tweak = Scalar::from_be_bytes(
                 self.swap_script
                     .taproot_spendinfo()?
                     .tap_tweak()
-                    .as_byte_array(),
-            )?;
+                    .as_byte_array()
+                    .clone(),
+            )
+            .expect("TODO");
 
-            let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
+            let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak).expect("TODO");
 
-            let session_id = MusigSessionId::new(&mut thread_rng());
+            let session_id = musig::SessionSecretRand::from_rng(&mut rand::rng());
 
             let mut extra_rand = [0u8; 32];
             OsRng.fill_bytes(&mut extra_rand);
 
             let (claim_sec_nonce, claim_pub_nonce) = key_agg_cache.nonce_gen(
-                &secp,
                 session_id,
-                keys.public_key(),
-                msg,
+                convert_public_key(keys.public_key()),
+                &msg,
                 Some(extra_rand),
-            )?;
+            );
 
             // Step 7: Get boltz's partial sig
             let claim_tx_hex = claim_tx.serialize().to_lower_hex_string();
@@ -694,24 +702,25 @@ impl BtcSwapTx {
             }?;
 
             let boltz_public_nonce =
-                MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce)?)?;
+                musig::PublicNonce::from_byte_array(&hex_to_bytes66(&partial_sig_resp.pub_nonce)?)
+                    .expect("TODO");
 
-            let boltz_partial_sig = MusigPartialSignature::from_slice(&Vec::from_hex(
+            let boltz_partial_sig = musig::PartialSignature::from_byte_array(&hex_to_bytes32(
                 &partial_sig_resp.partial_signature,
-            )?)?;
+            )?)
+            .expect("TODO");
 
             // Aggregate Our's and Other's Nonce and start the Musig session.
-            let agg_nonce = MusigAggNonce::new(&secp, &[boltz_public_nonce, claim_pub_nonce]);
+            let agg_nonce = musig::AggregatedNonce::new(&[&boltz_public_nonce, &claim_pub_nonce]);
 
-            let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
+            let musig_session = musig::Session::new(&key_agg_cache, agg_nonce, &msg);
 
             // Verify the Boltz's sig.
             let boltz_partial_sig_verify = musig_session.partial_verify(
-                &secp,
                 &key_agg_cache,
-                boltz_partial_sig,
-                boltz_public_nonce,
-                self.swap_script.sender_pubkey.inner,
+                &boltz_partial_sig,
+                &boltz_public_nonce,
+                convert_public_key(self.swap_script.sender_pubkey.inner),
             );
 
             if !boltz_partial_sig_verify {
@@ -721,12 +730,14 @@ impl BtcSwapTx {
             }
 
             let our_partial_sig =
-                musig_session.partial_sign(&secp, claim_sec_nonce, keys, &key_agg_cache)?;
+                musig_session.partial_sign(claim_sec_nonce, convert_keypair(keys), &key_agg_cache);
 
-            let schnorr_sig = musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
+            let schnorr_sig = musig_session
+                .partial_sig_agg(&[&boltz_partial_sig, &our_partial_sig])
+                .assume_valid();
 
             let final_schnorr_sig = Signature {
-                signature: schnorr_sig,
+                signature: convert_schnorr_signature(schnorr_sig),
                 sighash_type: TapSighashType::Default,
             };
 
@@ -734,7 +745,7 @@ impl BtcSwapTx {
 
             secp.verify_schnorr(
                 &final_schnorr_sig.signature,
-                &msg,
+                &bitcoin::secp256k1::Message::from_digest_slice(&msg)?,
                 &output_key.to_x_only_public_key(),
             )?;
 
@@ -866,6 +877,8 @@ impl BtcSwapTx {
             boltz_api, swap_id, ..
         }) = is_cooperative
         {
+            let secp = Secp256k1::new();
+
             // Start the Musig session
             refund_tx.lock_time = LockTime::ZERO; // No locktime for cooperative spend
 
@@ -879,33 +892,33 @@ impl BtcSwapTx {
                         bitcoin::TapSighashType::Default,
                     )?;
 
-                let msg = Message::from_digest_slice(refund_tx_taproot_hash.as_byte_array())?;
+                let msg = *refund_tx_taproot_hash.as_byte_array();
 
                 // Step 2: Get the Public and Secret nonces
                 let mut key_agg_cache = self.swap_script.musig_keyagg_cache();
 
-                let tweak = SecretKey::from_slice(
+                let tweak = Scalar::from_be_bytes(
                     self.swap_script
                         .taproot_spendinfo()?
                         .tap_tweak()
-                        .as_byte_array(),
-                )?;
+                        .as_byte_array()
+                        .clone(),
+                )
+                .expect("TODO");
 
-                let secp = Secp256k1::new();
-                let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
+                let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak).expect("TODO");
 
-                let session_id = MusigSessionId::new(&mut thread_rng());
+                let session_id = musig::SessionSecretRand::from_rng(&mut rand::rng());
 
                 let mut extra_rand = [0u8; 32];
                 OsRng.fill_bytes(&mut extra_rand);
 
                 let (sec_nonce, pub_nonce) = key_agg_cache.nonce_gen(
-                    &secp,
                     session_id,
-                    keys.public_key(),
-                    msg,
+                    convert_public_key(keys.public_key()),
+                    &msg,
                     Some(extra_rand),
-                )?;
+                );
 
                 // Step 7: Get boltz's partial sig
                 let refund_tx_hex = refund_tx.serialize().to_lower_hex_string();
@@ -936,25 +949,27 @@ impl BtcSwapTx {
                     ))),
                 }?;
 
-                let boltz_public_nonce =
-                    MusigPubNonce::from_slice(&Vec::from_hex(&partial_sig_resp.pub_nonce)?)?;
+                let boltz_public_nonce = musig::PublicNonce::from_byte_array(&hex_to_bytes66(
+                    &partial_sig_resp.pub_nonce,
+                )?)
+                .expect("TODO");
 
-                let boltz_partial_sig = MusigPartialSignature::from_slice(&Vec::from_hex(
+                let boltz_partial_sig = musig::PartialSignature::from_byte_array(&hex_to_bytes32(
                     &partial_sig_resp.partial_signature,
-                )?)?;
+                )?)
+                .expect("TODO");
 
                 // Aggregate Our's and Other's Nonce and start the Musig session.
-                let agg_nonce = MusigAggNonce::new(&secp, &[boltz_public_nonce, pub_nonce]);
+                let agg_nonce = musig::AggregatedNonce::new(&[&boltz_public_nonce, &pub_nonce]);
 
-                let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
+                let musig_session = musig::Session::new(&key_agg_cache, agg_nonce, &msg);
 
                 // Verify the Boltz's sig.
                 let boltz_partial_sig_verify = musig_session.partial_verify(
-                    &secp,
                     &key_agg_cache,
-                    boltz_partial_sig,
-                    boltz_public_nonce,
-                    self.swap_script.receiver_pubkey.inner, //boltz key
+                    &boltz_partial_sig,
+                    &boltz_public_nonce,
+                    convert_public_key(self.swap_script.receiver_pubkey.inner), //boltz key
                 );
 
                 if !boltz_partial_sig_verify {
@@ -964,13 +979,14 @@ impl BtcSwapTx {
                 }
 
                 let our_partial_sig =
-                    musig_session.partial_sign(&secp, sec_nonce, keys, &key_agg_cache)?;
+                    musig_session.partial_sign(sec_nonce, convert_keypair(keys), &key_agg_cache);
 
-                let schnorr_sig =
-                    musig_session.partial_sig_agg(&[boltz_partial_sig, our_partial_sig]);
+                let schnorr_sig = musig_session
+                    .partial_sig_agg(&[&boltz_partial_sig, &our_partial_sig])
+                    .assume_valid();
 
                 let final_schnorr_sig = Signature {
-                    signature: schnorr_sig,
+                    signature: convert_schnorr_signature(schnorr_sig),
                     sighash_type: TapSighashType::Default,
                 };
 
@@ -978,7 +994,7 @@ impl BtcSwapTx {
 
                 secp.verify_schnorr(
                     &final_schnorr_sig.signature,
-                    &msg,
+                    &bitcoin::secp256k1::Message::from_digest_slice(&msg)?,
                     &output_key.to_x_only_public_key(),
                 )?;
 
@@ -1159,35 +1175,97 @@ impl SwapScriptCommon for BtcSwapScript {
         keys: &Keypair,
         pub_nonce: &str,
         transaction_hash: &str,
-    ) -> Result<(MusigPartialSignature, MusigPubNonce), Error> {
+    ) -> Result<(musig::PartialSignature, musig::PublicNonce), Error> {
         // Step 1: Start with a Musig KeyAgg Cache
         let secp = Secp256k1::new();
 
         let mut key_agg_cache = self.musig_keyagg_cache();
 
-        let tweak = SecretKey::from_slice(self.taproot_spendinfo()?.tap_tweak().as_byte_array())?;
+        let tweak = Scalar::from_be_bytes(
+            self.taproot_spendinfo()?
+                .tap_tweak()
+                .as_byte_array()
+                .clone(),
+        )
+        .expect("TODO");
 
-        let _ = key_agg_cache.pubkey_xonly_tweak_add(&secp, tweak)?;
+        let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak).expect("TODO");
 
-        let session_id = MusigSessionId::new(&mut thread_rng());
+        let session_id = musig::SessionSecretRand::from_rng(&mut rand::rng());
 
-        let msg = Message::from_digest_slice(&Vec::from_hex(transaction_hash)?)?;
+        let msg = hex_to_bytes32(transaction_hash)?;
 
         // Step 4: Start the Musig2 Signing session
         let mut extra_rand = [0u8; 32];
         OsRng.fill_bytes(&mut extra_rand);
 
-        let (gen_sec_nonce, gen_pub_nonce) =
-            key_agg_cache.nonce_gen(&secp, session_id, keys.public_key(), msg, Some(extra_rand))?;
+        let (gen_sec_nonce, gen_pub_nonce) = key_agg_cache.nonce_gen(
+            session_id,
+            convert_public_key(keys.public_key()),
+            &msg,
+            Some(extra_rand),
+        );
 
-        let boltz_nonce = MusigPubNonce::from_slice(&Vec::from_hex(pub_nonce)?)?;
+        let boltz_nonce =
+            musig::PublicNonce::from_byte_array(&hex_to_bytes66(pub_nonce)?).expect("TODO");
 
-        let agg_nonce = MusigAggNonce::new(&secp, &[boltz_nonce, gen_pub_nonce]);
+        let agg_nonce = musig::AggregatedNonce::new(&[&boltz_nonce, &gen_pub_nonce]);
 
-        let musig_session = MusigSession::new(&secp, &key_agg_cache, agg_nonce, msg);
+        let musig_session = musig::Session::new(&key_agg_cache, agg_nonce, &msg);
 
-        let partial_sig = musig_session.partial_sign(&secp, gen_sec_nonce, keys, &key_agg_cache)?;
+        let partial_sig =
+            musig_session.partial_sign(gen_sec_nonce, convert_keypair(keys), &key_agg_cache);
 
         Ok((partial_sig, gen_pub_nonce))
     }
+}
+
+fn hex_to_bytes32(hex: &str) -> Result<[u8; 32], Error> {
+    let bytes = Vec::from_hex(hex)?;
+    if bytes.len() != 32 {
+        return Err(Error::Protocol(format!(
+            "Expected 32 bytes, got {}",
+            bytes.len()
+        )));
+    }
+    let mut result = [0u8; 32];
+    result.copy_from_slice(&bytes);
+    Ok(result)
+}
+
+fn hex_to_bytes66(hex: &str) -> Result<[u8; 66], Error> {
+    let bytes = Vec::from_hex(hex)?;
+    if bytes.len() != 66 {
+        return Err(Error::Protocol(format!(
+            "Expected 66 bytes, got {}",
+            bytes.len()
+        )));
+    }
+    let mut result = [0u8; 66];
+    result.copy_from_slice(&bytes);
+    Ok(result)
+}
+
+fn convert_pubkeys_for_musig<'a>(
+    _pubkeys: &'a [bitcoin::secp256k1::PublicKey; 2],
+) -> [&'a secp256k1_musig::PublicKey; 2] {
+    todo!()
+}
+
+fn convert_xonly_key(_key: secp256k1_musig::XOnlyPublicKey) -> bitcoin::XOnlyPublicKey {
+    todo!()
+}
+
+fn convert_public_key(_key: bitcoin::secp256k1::PublicKey) -> secp256k1_musig::PublicKey {
+    todo!()
+}
+
+fn convert_keypair(_keys: &bitcoin::secp256k1::Keypair) -> &secp256k1_musig::Keypair {
+    todo!()
+}
+
+fn convert_schnorr_signature(
+    _schnorr_sig: secp256k1_musig::schnorr::Signature,
+) -> bitcoin::secp256k1::schnorr::Signature {
+    todo!()
 }
