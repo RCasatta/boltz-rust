@@ -3,7 +3,7 @@ use bitcoin::hashes::Hash;
 use bitcoin::hex::{DisplayHex, FromHex};
 use bitcoin::key::rand::rngs::OsRng;
 use bitcoin::key::rand::RngCore;
-use bitcoin::secp256k1::{Keypair, Message, Secp256k1, SecretKey};
+use bitcoin::secp256k1::{Keypair, Message, Secp256k1};
 use bitcoin::sighash::Prevouts;
 use bitcoin::taproot::{LeafVersion, Signature, TaprootBuilder, TaprootSpendInfo};
 use bitcoin::transaction::Version;
@@ -16,7 +16,7 @@ use bitcoin::{sighash::SighashCache, Network, Sequence, Transaction, TxIn, TxOut
 use bitcoin::{Amount, TapLeafHash, TapSighashType, Txid, XOnlyPublicKey};
 use elements::pset::serialize::Serialize;
 use secp256k1_musig::{
-    musig::{self, KeyAggCache, PartialSignature, PublicNonce, SessionSecretRand},
+    musig::{self},
     rand, Scalar,
 };
 use std::str::FromStr;
@@ -1177,7 +1177,6 @@ impl SwapScriptCommon for BtcSwapScript {
         transaction_hash: &str,
     ) -> Result<(musig::PartialSignature, musig::PublicNonce), Error> {
         // Step 1: Start with a Musig KeyAgg Cache
-        let secp = Secp256k1::new();
 
         let mut key_agg_cache = self.musig_keyagg_cache();
 

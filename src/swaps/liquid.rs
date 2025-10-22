@@ -14,12 +14,7 @@ use elements::{
     Address, AssetIssuance, BlockHash, LockTime, OutPoint, SchnorrSig, SchnorrSighashType, Script,
     Sequence, Transaction, TxIn, TxInWitness, TxOut, TxOutWitness,
 };
-use secp256k1_musig::{
-    ffi::{MusigAggNonce, MusigPubNonce, MusigSession},
-    musig,
-    rand::{self, thread_rng},
-    Scalar,
-};
+use secp256k1_musig::{musig, rand, Scalar};
 use std::str::FromStr;
 
 use elements::encode::serialize;
@@ -1259,7 +1254,7 @@ impl LBtcSwapTx {
 }
 
 fn convert_schnorr_signature(
-    schnorr_sig: secp256k1_musig::schnorr::Signature,
+    _schnorr_sig: secp256k1_musig::schnorr::Signature,
 ) -> bitcoin::secp256k1::schnorr::Signature {
     todo!()
 }
@@ -1318,8 +1313,6 @@ impl SwapScriptCommon for LBtcSwapScript {
         transaction_hash: &str,
     ) -> Result<(musig::PartialSignature, musig::PublicNonce), Error> {
         // Step 1: Start with a Musig KeyAgg Cache
-        let secp = Secp256k1::new();
-
         let pubkeys = [self.receiver_pubkey.inner, self.sender_pubkey.inner];
         let converted = convert_pubkeys_for_musig(&pubkeys);
 
@@ -1364,7 +1357,7 @@ impl SwapScriptCommon for LBtcSwapScript {
     }
 }
 
-fn convert_keypair(keys: &Keypair) -> &secp256k1_musig::Keypair {
+fn convert_keypair(_keys: &Keypair) -> &secp256k1_musig::Keypair {
     todo!()
 }
 
