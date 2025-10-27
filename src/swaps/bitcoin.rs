@@ -17,11 +17,14 @@ use bitcoin::{Amount, TapLeafHash, TapSighashType, Txid, XOnlyPublicKey};
 use elements::pset::serialize::Serialize;
 use secp256k1_musig::{
     musig::{self},
-    rand, Scalar,
+    Scalar,
 };
 use std::str::FromStr;
 
-use crate::{error::Error, util::secrets::Preimage};
+use crate::{
+    error::Error,
+    util::secrets::{generate_random_32_bytes, Preimage},
+};
 
 use bitcoin::{blockdata::locktime::absolute::LockTime, hashes::hash160};
 
@@ -656,7 +659,8 @@ impl BtcSwapTx {
 
             let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak).expect("TODO");
 
-            let session_id = musig::SessionSecretRand::from_rng(&mut rand::rng());
+            let session_id =
+                musig::SessionSecretRand::assume_unique_per_nonce_gen(generate_random_32_bytes());
 
             let mut extra_rand = [0u8; 32];
             OsRng.fill_bytes(&mut extra_rand);
@@ -908,7 +912,9 @@ impl BtcSwapTx {
 
                 let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak).expect("TODO");
 
-                let session_id = musig::SessionSecretRand::from_rng(&mut rand::rng());
+                let session_id = musig::SessionSecretRand::assume_unique_per_nonce_gen(
+                    generate_random_32_bytes(),
+                );
 
                 let mut extra_rand = [0u8; 32];
                 OsRng.fill_bytes(&mut extra_rand);
@@ -1190,7 +1196,8 @@ impl SwapScriptCommon for BtcSwapScript {
 
         let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak).expect("TODO");
 
-        let session_id = musig::SessionSecretRand::from_rng(&mut rand::rng());
+        let session_id =
+            musig::SessionSecretRand::assume_unique_per_nonce_gen(generate_random_32_bytes());
 
         let msg = hex_to_bytes32(transaction_hash)?;
 

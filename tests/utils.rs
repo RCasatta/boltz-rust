@@ -143,13 +143,7 @@ pub fn start_pay_invoice_lnd(invoice: String) {
 
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
-        wasm_bindgen_futures::spawn_local(async {
-            let timeout_future = gloo_timers::future::TimeoutFuture::new(5000);
-            let _ = futures::select! {
-                _ = task.fuse() => {},
-                _ = timeout_future.fuse() => {},
-            };
-        });
+        todo!()
     }
 }
 

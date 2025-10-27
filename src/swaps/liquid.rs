@@ -14,13 +14,13 @@ use elements::{
     Address, AssetIssuance, BlockHash, LockTime, OutPoint, SchnorrSig, SchnorrSighashType, Script,
     Sequence, Transaction, TxIn, TxInWitness, TxOut, TxOutWitness,
 };
-use secp256k1_musig::{musig, rand, Scalar};
+use secp256k1_musig::{musig, Scalar};
 use std::str::FromStr;
 
 use elements::encode::serialize;
 use elements::secp256k1_zkp::Message;
 
-use crate::util::secrets::Preimage;
+use crate::util::secrets::{generate_random_32_bytes, Preimage};
 
 use crate::error::Error;
 
@@ -644,7 +644,8 @@ impl LBtcSwapTx {
 
             let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak).expect("TODO");
 
-            let session_id = musig::SessionSecretRand::from_rng(&mut rand::rng());
+            let session_id =
+                musig::SessionSecretRand::assume_unique_per_nonce_gen(generate_random_32_bytes());
 
             let mut extra_rand = [0u8; 32];
             OsRng.fill_bytes(&mut extra_rand);
@@ -954,7 +955,8 @@ impl LBtcSwapTx {
 
             let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak).expect("TODO");
 
-            let session_id = musig::SessionSecretRand::from_rng(&mut rand::rng());
+            let session_id =
+                musig::SessionSecretRand::assume_unique_per_nonce_gen(generate_random_32_bytes());
 
             let mut extra_rand = [0u8; 32];
             OsRng.fill_bytes(&mut extra_rand);
@@ -1328,7 +1330,8 @@ impl SwapScriptCommon for LBtcSwapScript {
 
         let _ = key_agg_cache.pubkey_xonly_tweak_add(&tweak).expect("TODO");
 
-        let session_id = musig::SessionSecretRand::from_rng(&mut rand::rng());
+        let session_id =
+            musig::SessionSecretRand::assume_unique_per_nonce_gen(generate_random_32_bytes());
 
         let msg = hex_to_bytes32(transaction_hash)?;
 

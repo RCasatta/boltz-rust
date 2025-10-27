@@ -178,6 +178,14 @@ impl Display for DerivationPurpose {
     }
 }
 
+/// Generates a random 32-byte array using getrandom crate.
+/// Works on all platforms including wasm32.
+pub fn generate_random_32_bytes() -> [u8; 32] {
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes).expect("Failed to generate random bytes");
+    bytes
+}
+
 /// Internally used rng to generate secure 32 byte preimages
 fn rng_32b() -> [u8; 32] {
     let mut bytes = [0u8; 32];
