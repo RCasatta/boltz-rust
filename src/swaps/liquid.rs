@@ -691,13 +691,11 @@ impl LBtcSwapTx {
             }?;
 
             let boltz_public_nonce =
-                musig::PublicNonce::from_byte_array(&hex_to_bytes66(&partial_sig_resp.pub_nonce)?)
-                    .expect("TODO");
+                musig::PublicNonce::from_str(&partial_sig_resp.pub_nonce).expect("TODO");
 
-            let boltz_partial_sig = musig::PartialSignature::from_byte_array(&hex_to_bytes32(
-                &partial_sig_resp.partial_signature,
-            )?)
-            .expect("TODO");
+            let boltz_partial_sig =
+                musig::PartialSignature::from_str(&partial_sig_resp.partial_signature)
+                    .expect("TODO");
 
             let agg_nonce = musig::AggregatedNonce::new(&[&boltz_public_nonce, &claim_pub_nonce]);
 
@@ -988,13 +986,11 @@ impl LBtcSwapTx {
             }?;
 
             let boltz_public_nonce =
-                musig::PublicNonce::from_byte_array(&hex_to_bytes66(&partial_sig_resp.pub_nonce)?)
-                    .expect("TODO");
+                musig::PublicNonce::from_str(&partial_sig_resp.pub_nonce).expect("TODO");
 
-            let boltz_partial_sig = musig::PartialSignature::from_byte_array(&hex_to_bytes32(
-                &partial_sig_resp.partial_signature,
-            )?)
-            .expect("TODO");
+            let boltz_partial_sig =
+                musig::PartialSignature::from_str(&partial_sig_resp.partial_signature)
+                    .expect("TODO");
 
             let agg_nonce = musig::AggregatedNonce::new(&[&boltz_public_nonce, &pub_nonce]);
 
@@ -1288,19 +1284,6 @@ fn hex_to_bytes32(hex: &str) -> Result<[u8; 32], Error> {
     Ok(result)
 }
 
-fn hex_to_bytes66(hex: &str) -> Result<[u8; 66], Error> {
-    let bytes = Vec::from_hex(hex)?;
-    if bytes.len() != 66 {
-        return Err(Error::Protocol(format!(
-            "Expected 66 bytes, got {}",
-            bytes.len()
-        )));
-    }
-    let mut result = [0u8; 66];
-    result.copy_from_slice(&bytes);
-    Ok(result)
-}
-
 impl SwapScriptCommon for LBtcSwapScript {
     fn swap_type(&self) -> SwapType {
         self.swap_type
@@ -1346,8 +1329,7 @@ impl SwapScriptCommon for LBtcSwapScript {
             Some(extra_rand),
         );
 
-        let boltz_nonce =
-            musig::PublicNonce::from_byte_array(&hex_to_bytes66(pub_nonce)?).expect("TODO");
+        let boltz_nonce = musig::PublicNonce::from_str(pub_nonce).expect("TODO");
 
         let agg_nonce = musig::AggregatedNonce::new(&[&boltz_nonce, &gen_pub_nonce]);
 
