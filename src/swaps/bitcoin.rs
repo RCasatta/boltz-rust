@@ -122,14 +122,14 @@ impl BtcSwapScript {
         match (self.swap_type, self.side.clone()) {
             (SwapType::ReverseSubmarine, _) | (SwapType::Chain, Some(Side::Claim)) => {
                 let pubkeys = [self.sender_pubkey.inner, self.receiver_pubkey.inner];
-                let converted = convert_pubkeys_for_musig(&pubkeys);
-                musig::KeyAggCache::new(&converted)
+                let [a, b] = convert_pubkeys_for_musig(&pubkeys);
+                musig::KeyAggCache::new(&[&a, &b])
             }
 
             (SwapType::Submarine, _) | (SwapType::Chain, _) => {
                 let pubkeys = [self.receiver_pubkey.inner, self.sender_pubkey.inner];
-                let converted = convert_pubkeys_for_musig(&pubkeys);
-                musig::KeyAggCache::new(&converted)
+                let [a, b] = convert_pubkeys_for_musig(&pubkeys);
+                musig::KeyAggCache::new(&[&a, &b])
             }
         }
     }
@@ -732,7 +732,7 @@ impl BtcSwapTx {
             }
 
             let our_partial_sig =
-                musig_session.partial_sign(claim_sec_nonce, convert_keypair(keys), &key_agg_cache);
+                musig_session.partial_sign(claim_sec_nonce, &convert_keypair(keys), &key_agg_cache);
 
             let schnorr_sig = musig_session
                 .partial_sig_agg(&[&boltz_partial_sig, &our_partial_sig])
@@ -980,7 +980,7 @@ impl BtcSwapTx {
                 }
 
                 let our_partial_sig =
-                    musig_session.partial_sign(sec_nonce, convert_keypair(keys), &key_agg_cache);
+                    musig_session.partial_sign(sec_nonce, &convert_keypair(keys), &key_agg_cache);
 
                 let schnorr_sig = musig_session
                     .partial_sig_agg(&[&boltz_partial_sig, &our_partial_sig])
@@ -1214,7 +1214,7 @@ impl SwapScriptCommon for BtcSwapScript {
         let musig_session = musig::Session::new(&key_agg_cache, agg_nonce, &msg);
 
         let partial_sig =
-            musig_session.partial_sign(gen_sec_nonce, convert_keypair(keys), &key_agg_cache);
+            musig_session.partial_sign(gen_sec_nonce, &convert_keypair(keys), &key_agg_cache);
 
         Ok((partial_sig, gen_pub_nonce))
     }
@@ -1234,25 +1234,30 @@ fn hex_to_bytes32(hex: &str) -> Result<[u8; 32], Error> {
 }
 
 fn convert_pubkeys_for_musig<'a>(
-    _pubkeys: &'a [bitcoin::secp256k1::PublicKey; 2],
-) -> [&'a secp256k1_musig::PublicKey; 2] {
-    todo!()
+    pubkeys: &'a [bitcoin::secp256k1::PublicKey; 2],
+) -> [secp256k1_musig::PublicKey; 2] {
+    [
+        convert_public_key(pubkeys[0]),
+        convert_public_key(pubkeys[1]),
+    ]
 }
 
-fn convert_xonly_key(_key: secp256k1_musig::XOnlyPublicKey) -> bitcoin::XOnlyPublicKey {
-    todo!()
+fn convert_xonly_key(key: secp256k1_musig::XOnlyPublicKey) -> bitcoin::XOnlyPublicKey {
+    bitcoin::XOnlyPublicKey::from_slice(&key.serialize()[..]).expect("xonly key size matches")
 }
 
-fn convert_public_key(_key: bitcoin::secp256k1::PublicKey) -> secp256k1_musig::PublicKey {
-    todo!()
+fn convert_public_key(key: bitcoin::secp256k1::PublicKey) -> secp256k1_musig::PublicKey {
+    secp256k1_musig::PublicKey::from_slice(&key.serialize()[..]).expect("public key size matches")
 }
 
-fn convert_keypair(_keys: &bitcoin::secp256k1::Keypair) -> &secp256k1_musig::Keypair {
-    todo!()
+fn convert_keypair(keys: &bitcoin::secp256k1::Keypair) -> secp256k1_musig::Keypair {
+    secp256k1_musig::Keypair::from_seckey_byte_array(keys.secret_bytes())
+        .expect("keypair size matches")
 }
 
 fn convert_schnorr_signature(
-    _schnorr_sig: secp256k1_musig::schnorr::Signature,
+    schnorr_sig: secp256k1_musig::schnorr::Signature,
 ) -> bitcoin::secp256k1::schnorr::Signature {
-    todo!()
+    bitcoin::secp256k1::schnorr::Signature::from_slice(schnorr_sig.as_byte_array())
+        .expect("signature size matches")
 }
